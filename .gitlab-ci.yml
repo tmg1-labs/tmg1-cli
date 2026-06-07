@@ -1,0 +1,34 @@
+image: rust:latest
+
+variables:
+  GIT_SUBMODULE_STRATEGY: recursive
+  CARGO_HOME: $CI_PROJECT_DIR/.cargo
+
+cache:
+  key: cargo-$CI_COMMIT_REF_SLUG
+  paths:
+    - .cargo/registry
+    - .cargo/git
+    - target/
+
+stages:
+  - build
+  - test
+
+build:
+  stage: build
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq g++ 2>/dev/null
+  script:
+    - cargo build --release
+  artifacts:
+    paths:
+      - target/release/tmg1
+    expire_in: 1 week
+
+test:
+  stage: test
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq g++ 2>/dev/null
+  script:
+    - cargo test

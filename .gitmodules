@@ -1,0 +1,3 @@
+[submodule "tmg1-codec"]
+	path = tmg1-codec
+	url = ../tmg1-codec.git
