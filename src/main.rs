@@ -104,6 +104,10 @@ struct EncodeArgs {
     /// シーンチェンジ検出（Pフレームを I/P 両方で圧縮し小さい方を採用）を有効化
     #[arg(long, default_value = "true", value_parser = clap::builder::BoolishValueParser::new(), num_args = 1)]
     scd: bool,
+
+    /// 可変フレームレート（前フレームと同一フレームを書かず ptsDelta に集約）を有効化
+    #[arg(long, default_value = "true", value_parser = clap::builder::BoolishValueParser::new(), num_args = 1)]
+    vfr: bool,
 }
 
 #[derive(Parser)]
@@ -233,6 +237,7 @@ fn cmd_encode(args: EncodeArgs) {
         rice_mode:       args.rice_mode.as_u8(),
         rice_k:          args.rice_k,
         scene_change_enabled: args.scd as u8,
+        vfr_enabled:     args.vfr as u8,
     };
 
     let enc = unsafe { tmg1_encoder_create(&mut out_stream, &config) };
@@ -328,7 +333,17 @@ fn cmd_decode(args: DecodeArgs) {
     eprintln!("TMG1: {width}x{height} @ {den}/{num} fps");
 
     let mut buf = vec![0u8; frame_bytes];
+    let mut prev = vec![0u8; frame_bytes];
+    let mut has_prev = false;
     let mut total_frames = 0usize;
+
+    // 書き込みヘルパ（エラー時は終了）
+    let write_frame = |wc: &mut WriteCtx, data: &[u8]| {
+        wc.file.write_all(data).unwrap_or_else(|e| {
+            eprintln!("tmg1: 書き込みエラー: {e}");
+            std::process::exit(1);
+        });
+    };
 
     loop {
         let ret = unsafe { tmg1_decoder_decode_frame(dec, buf.as_mut_ptr(), frame_bytes) };
@@ -336,12 +351,23 @@ fn cmd_decode(args: DecodeArgs) {
             // エラーコード -1 は通常 EOF
             break;
         }
-        write_ctx.file.write_all(&buf).unwrap_or_else(|e| {
-            eprintln!("tmg1: 書き込みエラー: {e}");
-            unsafe { tmg1_decoder_destroy(dec) };
-            std::process::exit(1);
-        });
+
+        // VFR(可変フレームレート)の復元: ptsDelta が 1 より大きい場合、
+        // 前フレームが (ptsDelta - 1) 回続いたことを意味するため、その分だけ繰り返してから
+        // 現フレームを書き込む (dotnet版デコーダと同じ挙動。CFR では全て ptsDelta=1 で無変化)。
+        let pts = unsafe { tmg1_decoder_last_pts_delta(dec) };
+        if has_prev && pts > 1 {
+            for _ in 0..(pts - 1) {
+                write_frame(&mut write_ctx, &prev);
+                total_frames += 1;
+            }
+        }
+
+        write_frame(&mut write_ctx, &buf);
         total_frames += 1;
+
+        prev.copy_from_slice(&buf);
+        has_prev = true;
     }
 
     unsafe { tmg1_decoder_destroy(dec) };
