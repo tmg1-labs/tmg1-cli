@@ -68,6 +68,10 @@ struct EncodeArgs {
     /// 差分圧縮（Pフレーム）を有効化
     #[arg(long, default_value = "true", value_parser = clap::builder::BoolishValueParser::new(), num_args = 1)]
     delta: bool,
+
+    /// 予測フィルタ（None/Left/Up を試行し最小を選択）を有効化
+    #[arg(long, default_value = "true", value_parser = clap::builder::BoolishValueParser::new(), num_args = 1)]
+    prediction: bool,
 }
 
 #[derive(Parser)]
@@ -193,7 +197,7 @@ fn cmd_encode(args: EncodeArgs) {
         msb_first:       args.msb_first as u8,
         use_range_coder: matches!(args.coder, Coder::Range) as u8,
         delta_enabled:   args.delta as u8,
-        _pad:            0,
+        prediction_enabled: args.prediction as u8,
     };
 
     let enc = unsafe { tmg1_encoder_create(&mut out_stream, &config) };

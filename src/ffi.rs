@@ -26,7 +26,7 @@ pub struct Tmg1EncodeConfig {
     pub msb_first:      c_uchar,
     pub use_range_coder: c_uchar,
     pub delta_enabled:  c_uchar,
-    pub _pad:           c_uchar,
+    pub prediction_enabled: c_uchar,
 }
 
 pub enum Tmg1DecoderOpaque {}
