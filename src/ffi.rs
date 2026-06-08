@@ -29,6 +29,7 @@ pub struct Tmg1EncodeConfig {
     pub prediction_enabled: c_uchar,
     pub rice_mode:      c_uchar,
     pub rice_k:         c_uchar,
+    pub scene_change_enabled: c_uchar,
 }
 
 pub enum Tmg1DecoderOpaque {}

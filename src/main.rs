@@ -100,6 +100,10 @@ struct EncodeArgs {
     /// Fixedモードで使用するRice-k値（0..7）
     #[arg(long, default_value_t = 1, value_parser = clap::value_parser!(u8).range(0..=7))]
     rice_k: u8,
+
+    /// シーンチェンジ検出（Pフレームを I/P 両方で圧縮し小さい方を採用）を有効化
+    #[arg(long, default_value = "true", value_parser = clap::builder::BoolishValueParser::new(), num_args = 1)]
+    scd: bool,
 }
 
 #[derive(Parser)]
@@ -228,6 +232,7 @@ fn cmd_encode(args: EncodeArgs) {
         prediction_enabled: args.prediction as u8,
         rice_mode:       args.rice_mode.as_u8(),
         rice_k:          args.rice_k,
+        scene_change_enabled: args.scd as u8,
     };
 
     let enc = unsafe { tmg1_encoder_create(&mut out_stream, &config) };
