@@ -62,11 +62,11 @@ struct EncodeArgs {
     coder: Coder,
 
     /// MSBファースト（false でLSBファースト）
-    #[arg(long, default_value_t = true)]
+    #[arg(long, default_value = "true", value_parser = clap::builder::BoolishValueParser::new(), num_args = 1)]
     msb_first: bool,
 
     /// 差分圧縮（Pフレーム）を有効化
-    #[arg(long, default_value_t = true)]
+    #[arg(long, default_value = "true", value_parser = clap::builder::BoolishValueParser::new(), num_args = 1)]
     delta: bool,
 }
 
