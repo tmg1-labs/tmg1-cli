@@ -35,6 +35,26 @@ enum Coder {
     Range,
 }
 
+#[derive(ValueEnum, Clone)]
+enum RiceMode {
+    /// 固定K (--rice-k の値を使用。内部的には per-frame 機構で表現)
+    Fixed,
+    /// 行ごとに最適K (3bit/行)
+    PerLine,
+    /// フレームごとに最適K (3bit/フレーム)
+    PerFrame,
+}
+
+impl RiceMode {
+    fn as_u8(&self) -> u8 {
+        match self {
+            RiceMode::Fixed    => 0,
+            RiceMode::PerLine  => 1,
+            RiceMode::PerFrame => 2,
+        }
+    }
+}
+
 #[derive(Parser)]
 struct EncodeArgs {
     /// 入力ファイル（- で stdin）
@@ -72,6 +92,14 @@ struct EncodeArgs {
     /// 予測フィルタ（None/Left/Up を試行し最小を選択）を有効化
     #[arg(long, default_value = "true", value_parser = clap::builder::BoolishValueParser::new(), num_args = 1)]
     prediction: bool,
+
+    /// Riceパラメータの決定モード（Riceコーダ使用時のみ）
+    #[arg(long, value_enum, default_value = "per-line")]
+    rice_mode: RiceMode,
+
+    /// Fixedモードで使用するRice-k値（0..7）
+    #[arg(long, default_value_t = 1, value_parser = clap::value_parser!(u8).range(0..=7))]
+    rice_k: u8,
 }
 
 #[derive(Parser)]
@@ -198,6 +226,8 @@ fn cmd_encode(args: EncodeArgs) {
         use_range_coder: matches!(args.coder, Coder::Range) as u8,
         delta_enabled:   args.delta as u8,
         prediction_enabled: args.prediction as u8,
+        rice_mode:       args.rice_mode.as_u8(),
+        rice_k:          args.rice_k,
     };
 
     let enc = unsafe { tmg1_encoder_create(&mut out_stream, &config) };
