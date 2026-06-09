@@ -3,8 +3,8 @@ mod ffi;
 use clap::{Parser, Subcommand, ValueEnum};
 use std::fs::File;
 use std::io::{self, Read, Write};
-use std::os::raw::{c_int, c_long, c_uchar, c_void};
-use std::path::PathBuf;
+use std::os::raw::{c_int, c_uchar, c_void};
+use std::process::{Command, Stdio};
 
 use ffi::*;
 
@@ -23,6 +23,8 @@ struct Cli {
 enum Commands {
     /// rawビットプレーンデータをTMG1にエンコード
     Encode(EncodeArgs),
+    /// ffmpeg を利用してメディアファイルをTMG1にトランスコード
+    Transcode(TranscodeArgs),
     /// TMG1ファイルをrawビットプレーンデータにデコード
     Decode(DecodeArgs),
     /// TMG1ファイルのメタデータを表示
@@ -115,6 +117,57 @@ struct EncodeArgs {
 }
 
 #[derive(Parser)]
+struct TranscodeArgs {
+    /// 入力メディアファイル（- で stdin）
+    #[arg(short, long, default_value = "-")]
+    input: String,
+
+    /// 出力ファイル（- で stdout）
+    #[arg(short, long, default_value = "-")]
+    output: String,
+
+    /// フレームサイズ（例: 128x64）
+    #[arg(long)]
+    size: String,
+
+    /// 出力フレームレート（fps）
+    #[arg(long)]
+    fps: u16,
+
+    /// キーフレーム間隔
+    #[arg(long, default_value_t = 60)]
+    key_int: u16,
+
+    /// エントロピー符号化器
+    #[arg(long, value_enum, default_value = "rice")]
+    coder: Coder,
+
+    /// 予測フィルタ（None/Left/Up を試行し最小を選択）を有効化
+    #[arg(long, default_value = "true", value_parser = clap::builder::BoolishValueParser::new(), num_args = 1)]
+    prediction: bool,
+
+    /// Riceパラメータの決定モード（Riceコーダ使用時のみ）
+    #[arg(long, value_enum, default_value = "per-line")]
+    rice_mode: RiceMode,
+
+    /// Fixedモードで使用するRice-k値（0..7）
+    #[arg(long, default_value_t = 1, value_parser = clap::value_parser!(u8).range(0..=7))]
+    rice_k: u8,
+
+    /// シーンチェンジ検出（Pフレームを I/P 両方で圧縮し小さい方を採用）を有効化
+    #[arg(long, default_value = "true", value_parser = clap::builder::BoolishValueParser::new(), num_args = 1)]
+    scd: bool,
+
+    /// 可変フレームレート（前フレームと同一フレームを書かず ptsDelta に集約）を有効化
+    #[arg(long, default_value = "true", value_parser = clap::builder::BoolishValueParser::new(), num_args = 1)]
+    vfr: bool,
+
+    /// ファイル末尾にフレーム索引チャンク（TMGX）を付加する
+    #[arg(long, default_value_t = false)]
+    index: bool,
+}
+
+#[derive(Parser)]
 struct DecodeArgs {
     /// 入力ファイル（- で stdin）
     #[arg(short, long, default_value = "-")]
@@ -143,10 +196,20 @@ struct FileCtx {
 unsafe extern "C" fn file_read(ctx: *mut c_void, buf: *mut c_uchar, len: usize) -> c_int {
     let fc = &mut *(ctx as *mut FileCtx);
     let slice = std::slice::from_raw_parts_mut(buf, len);
-    match fc.file.read(slice) {
-        Ok(n) => n as c_int,
-        Err(_) => -1,
+    // C++側 readBytes は「返り値 == len」を要求する（不足は ReadError 扱い）。
+    // パイプ/stdin は 1 回の read で要求未満しか返さないことがあるため、
+    // len 充足か EOF までフルリードする（fread 相当のセマンティクス）。
+    // EOF 時は読めた分（< len, 多くは 0）を返し、呼び出し側で終端と判定させる。
+    let mut total = 0;
+    while total < len {
+        match fc.file.read(&mut slice[total..]) {
+            Ok(0) => break, // EOF
+            Ok(n) => total += n,
+            Err(ref e) if e.kind() == io::ErrorKind::Interrupted => continue,
+            Err(_) => return -1,
+        }
     }
+    total as c_int
 }
 
 struct WriteCtx {
@@ -207,26 +270,6 @@ fn parse_size(size: &str) -> (u16, u16) {
 
 fn cmd_encode(args: EncodeArgs) {
     let (width, height) = parse_size(&args.size);
-    // rawビットプレーン: 1ピクセル1ビット、1行 = width/8 バイト
-    let frame_bytes = ((width as usize + 7) / 8) * height as usize;
-
-    let mut read_ctx = FileCtx { file: open_read(&args.input) };
-    let mut write_ctx = WriteCtx { file: open_write(&args.output) };
-
-    let mut in_stream = Tmg1Stream {
-        ctx:   &mut read_ctx as *mut FileCtx as *mut c_void,
-        read:  Some(file_read),
-        write: None,
-        tell:  None,
-        seek:  None,
-    };
-    let mut out_stream = Tmg1Stream {
-        ctx:   &mut write_ctx as *mut WriteCtx as *mut c_void,
-        read:  None,
-        write: Some(file_write),
-        tell:  None,
-        seek:  None,
-    };
 
     let config = Tmg1EncodeConfig {
         width,
@@ -245,6 +288,26 @@ fn cmd_encode(args: EncodeArgs) {
         index_enabled:   args.index as u8,
     };
 
+    encode_stream(open_read(&args.input), open_write(&args.output), config, "エンコード");
+}
+
+// rawビットプレーン入力ストリームを TMG1 にエンコードする共通処理。
+// encode / transcode の両方から利用する（transcode は input が ffmpeg の標準出力）。
+fn encode_stream(input: Box<dyn Read>, output: Box<dyn Write>, config: Tmg1EncodeConfig, label: &str) {
+    // rawビットプレーン: 1ピクセル1ビット、1行 = width/8 バイト
+    let frame_bytes = ((config.width as usize + 7) / 8) * config.height as usize;
+
+    let mut read_ctx = FileCtx { file: input };
+    let mut write_ctx = WriteCtx { file: output };
+
+    let mut out_stream = Tmg1Stream {
+        ctx:   &mut write_ctx as *mut WriteCtx as *mut c_void,
+        read:  None,
+        write: Some(file_write),
+        tell:  None,
+        seek:  None,
+    };
+
     let enc = unsafe { tmg1_encoder_create(&mut out_stream, &config) };
     if enc.is_null() {
         eprintln!("tmg1: エンコーダの初期化に失敗しました");
@@ -257,14 +320,17 @@ fn cmd_encode(args: EncodeArgs) {
 
     loop {
         // フレームを1枚分読み込む
-        let n = unsafe {
-            let ctx = &mut read_ctx;
-            let slice = std::slice::from_raw_parts_mut(buf.as_mut_ptr(), frame_bytes);
-            read_exact_or_eof(&mut *ctx.file, slice)
-        };
+        let n = read_exact_or_eof(&mut *read_ctx.file, &mut buf);
         match n {
             Ok(0) => break, // EOF
-            Ok(_) => {}
+            Ok(m) if m == frame_bytes => {}
+            // 端数（フレーム未満）は破損入力とみなす。transcode 終了直前の
+            // ffmpeg 標準出力打ち切りもここで検出される。
+            Ok(m) => {
+                eprintln!("tmg1: 入力がフレーム境界で終わっていません（{m}/{frame_bytes} バイト）");
+                unsafe { tmg1_encoder_destroy(enc) };
+                std::process::exit(1);
+            }
             Err(e) => {
                 eprintln!("tmg1: 読み込みエラー: {e}");
                 unsafe { tmg1_encoder_destroy(enc) };
@@ -290,7 +356,83 @@ fn cmd_encode(args: EncodeArgs) {
         std::process::exit(1);
     }
 
-    eprintln!("エンコード完了: {total_frames} フレーム, 入力 {total_bytes} バイト");
+    // stdout は行バッファのため、パイプ下流へ全バイトを確実に届けるよう明示 flush する。
+    write_ctx.file.flush().unwrap_or_else(|e| {
+        eprintln!("tmg1: 出力フラッシュエラー: {e}");
+        std::process::exit(1);
+    });
+
+    eprintln!("{label}完了: {total_frames} フレーム, 入力 {total_bytes} バイト");
+}
+
+// ---------------------------------------------------------------------------
+// transcode (ffmpeg ラッパー)
+// ---------------------------------------------------------------------------
+
+fn cmd_transcode(args: TranscodeArgs) {
+    let (width, height) = parse_size(&args.size);
+
+    let use_stdin = args.input == "-";
+    let scale = format!("scale={width}:{height}");
+    let fps_str = args.fps.to_string();
+
+    // ffmpeg で monow(1bpp, MSBファースト) の rawvideo を生成し、その標準出力をエンコーダへ流す。
+    let mut cmd = Command::new("ffmpeg");
+    cmd.arg("-i")
+        .arg(if use_stdin { "pipe:0" } else { args.input.as_str() })
+        .args(["-vf", &scale, "-r", &fps_str, "-f", "rawvideo", "-pix_fmt", "monow", "pipe:1"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit()); // ffmpeg の進捗ログは自プロセスの stderr へそのまま流す
+    if use_stdin {
+        cmd.stdin(Stdio::piped());
+    }
+
+    let mut child = cmd.spawn().unwrap_or_else(|e| {
+        eprintln!("tmg1: ffmpeg の起動に失敗しました（ffmpeg はインストールされていますか）: {e}");
+        std::process::exit(1);
+    });
+
+    // stdin 入力時は、自プロセスの標準入力を ffmpeg の標準入力へ別スレッドで流し込む。
+    // （同一スレッドで書き込みつつ標準出力を読むとパイプバッファでデッドロックするため）
+    if use_stdin {
+        let mut child_stdin = child.stdin.take().expect("ffmpeg stdin");
+        std::thread::spawn(move || {
+            let _ = io::copy(&mut io::stdin(), &mut child_stdin);
+            // child_stdin がスコープ終端でクローズされ、ffmpeg に EOF を伝える
+        });
+    }
+
+    let child_stdout = child.stdout.take().expect("ffmpeg stdout");
+
+    let config = Tmg1EncodeConfig {
+        width,
+        height,
+        timebase_num:    1,
+        timebase_den:    args.fps,
+        key_interval:    args.key_int,
+        msb_first:       1, // ffmpeg monow は MSBファースト固定
+        use_range_coder: matches!(args.coder, Coder::Range) as u8,
+        delta_enabled:   1, // transcode では P-Frame 圧縮を常時有効（dotnet版準拠）
+        prediction_enabled: args.prediction as u8,
+        rice_mode:       args.rice_mode.as_u8(),
+        rice_k:          args.rice_k,
+        scene_change_enabled: args.scd as u8,
+        vfr_enabled:     args.vfr as u8,
+        index_enabled:   args.index as u8,
+    };
+
+    eprintln!("トランスコード開始: {width}x{height} @ {}fps", args.fps);
+    encode_stream(Box::new(child_stdout), open_write(&args.output), config, "トランスコード");
+
+    // ffmpeg の終了を待ち、異常終了を検出する。
+    let status = child.wait().unwrap_or_else(|e| {
+        eprintln!("tmg1: ffmpeg の終了待機に失敗しました: {e}");
+        std::process::exit(1);
+    });
+    if !status.success() {
+        eprintln!("tmg1: ffmpeg が異常終了しました: {status}");
+        std::process::exit(1);
+    }
 }
 
 // フレーム分ちょうど読むか EOF を検出する
@@ -400,13 +542,27 @@ fn cmd_info(args: InfoArgs) {
         std::process::exit(1);
     }
 
-    let width  = unsafe { tmg1_decoder_width(dec) };
-    let height = unsafe { tmg1_decoder_height(dec) };
-    let num    = unsafe { tmg1_decoder_timebase_num(dec) };
-    let den    = unsafe { tmg1_decoder_timebase_den(dec) };
+    let width   = unsafe { tmg1_decoder_width(dec) };
+    let height  = unsafe { tmg1_decoder_height(dec) };
+    let num     = unsafe { tmg1_decoder_timebase_num(dec) };
+    let den     = unsafe { tmg1_decoder_timebase_den(dec) };
+    let version = unsafe { tmg1_decoder_version(dec) };
+    let key_int = unsafe { tmg1_decoder_key_interval(dec) };
+    let flags   = unsafe { tmg1_decoder_flags(dec) };
 
-    println!("Size:      {width}x{height}");
-    println!("Framerate: {den}/{num}");
+    // flags: bit0=MSBファースト, bit2=Rangeコーダ (types.h の FLAG_*)
+    let msb_first = flags & 0x01 != 0;
+    let coder = if flags & 0x04 != 0 { "Range" } else { "Rice" };
+    let fps = if num != 0 { den as f64 / num as f64 } else { 0.0 };
+
+    println!("--- TMG1 File Info ---");
+    println!("  Version:     {version}");
+    println!("  Size:        {width}x{height}");
+    println!("  Framerate:   {den}/{num} ({fps:.2} fps)");
+    println!("  KeyInterval: {key_int}");
+    println!("  MSB First:   {msb_first}");
+    println!("  Coder:       {coder}");
+    println!("------------------------");
 
     unsafe { tmg1_decoder_destroy(dec) };
 }
@@ -418,8 +574,9 @@ fn cmd_info(args: InfoArgs) {
 fn main() {
     let cli = Cli::parse();
     match cli.command {
-        Commands::Encode(args) => cmd_encode(args),
-        Commands::Decode(args) => cmd_decode(args),
-        Commands::Info(args)   => cmd_info(args),
+        Commands::Encode(args)    => cmd_encode(args),
+        Commands::Transcode(args) => cmd_transcode(args),
+        Commands::Decode(args)    => cmd_decode(args),
+        Commands::Info(args)      => cmd_info(args),
     }
 }

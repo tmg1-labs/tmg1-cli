@@ -20,6 +20,13 @@ fn main() {
         .include(include_dir)
         .file(format!("{capi_dir}/tmg1_c.cpp"));
 
+    // MSVC は既定でソースをシステムコードページ(日本語環境では932/Shift-JIS)として読むため、
+    // UTF-8 の日本語コメントが文字化けして構文エラーになる。/utf-8 で UTF-8 と明示する。
+    // (GCC/Clang は既定で UTF-8 のため不要)
+    if std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc") {
+        build.flag("/utf-8");
+    }
+
     for src in &srcs {
         build.file(format!("{src_dir}/{src}"));
     }

@@ -46,6 +46,9 @@ extern "C" {
     pub fn tmg1_decoder_timebase_num(dec: *const Tmg1DecoderOpaque) -> c_ushort;
     pub fn tmg1_decoder_timebase_den(dec: *const Tmg1DecoderOpaque) -> c_ushort;
     pub fn tmg1_decoder_last_pts_delta(dec: *const Tmg1DecoderOpaque) -> c_uint;
+    pub fn tmg1_decoder_version(dec: *const Tmg1DecoderOpaque) -> c_uchar;
+    pub fn tmg1_decoder_key_interval(dec: *const Tmg1DecoderOpaque) -> c_ushort;
+    pub fn tmg1_decoder_flags(dec: *const Tmg1DecoderOpaque) -> c_uchar;
 
     pub fn tmg1_encoder_create(stream: *mut Tmg1Stream, config: *const Tmg1EncodeConfig) -> *mut Tmg1EncoderOpaque;
     pub fn tmg1_encoder_destroy(enc: *mut Tmg1EncoderOpaque);
