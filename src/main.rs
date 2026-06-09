@@ -108,6 +108,10 @@ struct EncodeArgs {
     /// 可変フレームレート（前フレームと同一フレームを書かず ptsDelta に集約）を有効化
     #[arg(long, default_value = "true", value_parser = clap::builder::BoolishValueParser::new(), num_args = 1)]
     vfr: bool,
+
+    /// ファイル末尾にフレーム索引チャンク（TMGX）を付加する
+    #[arg(long, default_value_t = false)]
+    index: bool,
 }
 
 #[derive(Parser)]
@@ -238,6 +242,7 @@ fn cmd_encode(args: EncodeArgs) {
         rice_k:          args.rice_k,
         scene_change_enabled: args.scd as u8,
         vfr_enabled:     args.vfr as u8,
+        index_enabled:   args.index as u8,
     };
 
     let enc = unsafe { tmg1_encoder_create(&mut out_stream, &config) };
