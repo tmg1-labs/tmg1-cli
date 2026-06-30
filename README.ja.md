@@ -137,9 +137,9 @@ tmg1 decode -i out.tmg1 -o frames.raw
 
 ## ビルドと CI
 
-CI は GitLab（`.gitlab-ci.yml`、`rust:latest`、`g++` を導入）で `cargo build
---release` と `cargo test` を実行します。サブモジュールは
-`GIT_SUBMODULE_STRATEGY: recursive` で取得します。
+CI は GitHub Actions（`.github/workflows/ci.yml`、`ubuntu-latest`）で `cargo build
+--release` と `cargo test` を実行し、`tmg1` バイナリを artifact として保存します。
+サブモジュールは recursive で取得します（`build.rs` が同梱 codec を `cc` でコンパイル）。
 
 ## TMG1 フォーマット
 

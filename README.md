@@ -138,9 +138,10 @@ tmg1 decode -i out.tmg1 -o frames.raw
 
 ## Build & CI
 
-CI runs on GitLab (`.gitlab-ci.yml`, `rust:latest`, installing `g++`) and runs
-`cargo build --release` and `cargo test`. Submodules are fetched with
-`GIT_SUBMODULE_STRATEGY: recursive`.
+CI runs on GitHub Actions (`.github/workflows/ci.yml`, `ubuntu-latest`) and runs
+`cargo build --release` and `cargo test`, then uploads the `tmg1` binary as an
+artifact. Submodules are fetched recursively (`build.rs` compiles the bundled
+codec via `cc`).
 
 ## TMG1 Format
 
