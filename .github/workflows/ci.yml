@@ -1,0 +1,33 @@
+name: CI
+
+# GitLab CI (.gitlab-ci.yml) から移行。MR / 全 push 相当を
+# pull_request + push(main, feature/**) で再現する。
+on:
+  push:
+    branches: [main, 'feature/**']
+  pull_request:
+
+jobs:
+  build_test:
+    runs-on: ubuntu-latest
+    steps:
+      # codec を含むサブモジュールごと取得（build.rs が tmg1-codec/ を cc でコンパイルする）
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # ubuntu-latest は rust(stable)・g++ を同梱。cargo キャッシュのみ追加する。
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build --release
+
+      - name: Test
+        run: cargo test
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: tmg1
+          path: target/release/tmg1
+          retention-days: 7
