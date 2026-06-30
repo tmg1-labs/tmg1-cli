@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # codec を含むサブモジュールごと取得（build.rs が tmg1-codec/ を cc でコンパイルする）
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           submodules: recursive
 
