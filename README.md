@@ -9,8 +9,7 @@ files, and is designed to slot into ffmpeg pipelines via stdin/stdout.
 `tmg1-cli` is a thin front-end over the shared C++ codec
 [`tmg1-codec`](https://github.com/tmg1-labs/tmg1-codec), which it calls through
 the C FFI. The codec is vendored as a submodule and compiled by `build.rs` at
-build time, so a single codec commit is shared with the ESP32 player
-[`tmg1-arduino`](https://github.com/tmg1-labs/tmg1-arduino).
+build time.
 
 ## Features
 
@@ -149,6 +148,11 @@ The authoritative byte-level layout of `.tmg1` lives in the standalone
 [**TMG1 format specification**](https://github.com/tmg1-labs/.github/blob/main/docs/tmg1-format.md).
 See [`tmg1-codec`](https://github.com/tmg1-labs/tmg1-codec) for the codec
 internals and the C++/FFI API.
+
+## Related projects
+
+Part of **[TMG1 Labs](https://github.com/tmg1-labs)** — see the organization
+profile for all repositories in the project.
 
 ## License
 

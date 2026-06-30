@@ -9,9 +9,7 @@
 `tmg1-cli` は共有 C++ コーデック
 [`tmg1-codec`](https://github.com/tmg1-labs/tmg1-codec) を C FFI 経由で呼び出す
 薄いフロントエンドです。codec はサブモジュールとして同梱され、ビルド時に
-`build.rs` がコンパイルするため、ESP32 プレイヤー
-[`tmg1-arduino`](https://github.com/tmg1-labs/tmg1-arduino) と単一の codec
-コミットを共有します。
+`build.rs` がコンパイルします。
 
 ## 特長
 
@@ -149,6 +147,11 @@ CI は GitLab（`.gitlab-ci.yml`、`rust:latest`、`g++` を導入）で `cargo 
 [**TMG1 フォーマット仕様書**](https://github.com/tmg1-labs/.github/blob/main/docs/tmg1-format.ja.md)
 に置きます。コーデック内部や C++/FFI API は
 [`tmg1-codec`](https://github.com/tmg1-labs/tmg1-codec) を参照してください。
+
+## 関連プロジェクト
+
+**[TMG1 Labs](https://github.com/tmg1-labs)** の一部です。プロジェクトの全リポジトリ
+一覧は組織プロフィールを参照してください。
 
 ## ライセンス
 
