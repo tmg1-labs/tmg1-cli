@@ -114,6 +114,10 @@ struct EncodeArgs {
     /// ファイル末尾にフレーム索引チャンク（TMGX）を付加する
     #[arg(long, default_value_t = false)]
     index: bool,
+
+    /// 入力ビットを反転してからエンコードする（白黒極性反転用）
+    #[arg(long, default_value = "false", value_parser = clap::builder::BoolishValueParser::new(), num_args = 1)]
+    invert: bool,
 }
 
 #[derive(Parser)]
@@ -165,6 +169,10 @@ struct TranscodeArgs {
     /// ファイル末尾にフレーム索引チャンク（TMGX）を付加する
     #[arg(long, default_value_t = false)]
     index: bool,
+
+    /// 入力ビットを反転してからエンコードする（白黒極性反転用）
+    #[arg(long, default_value = "false", value_parser = clap::builder::BoolishValueParser::new(), num_args = 1)]
+    invert: bool,
 }
 
 #[derive(Parser)]
@@ -288,12 +296,14 @@ fn cmd_encode(args: EncodeArgs) {
         index_enabled:   args.index as u8,
     };
 
-    encode_stream(open_read(&args.input), open_write(&args.output), config, "エンコード");
+    encode_stream(open_read(&args.input), open_write(&args.output), config, "エンコード", args.invert);
 }
 
 // rawビットプレーン入力ストリームを TMG1 にエンコードする共通処理。
 // encode / transcode の両方から利用する（transcode は input が ffmpeg の標準出力）。
-fn encode_stream(input: Box<dyn Read>, output: Box<dyn Write>, config: Tmg1EncodeConfig, label: &str) {
+// invert: true の場合、フレーム読込直後・エンコード直前に各バイトを反転する
+// （コーデック/フォーマットは無変更。単なる前処理）。
+fn encode_stream(input: Box<dyn Read>, output: Box<dyn Write>, config: Tmg1EncodeConfig, label: &str, invert: bool) {
     // rawビットプレーン: 1ピクセル1ビット、1行 = width/8 バイト
     let frame_bytes = ((config.width as usize + 7) / 8) * config.height as usize;
 
@@ -335,6 +345,12 @@ fn encode_stream(input: Box<dyn Read>, output: Box<dyn Write>, config: Tmg1Encod
                 eprintln!("tmg1: 読み込みエラー: {e}");
                 unsafe { tmg1_encoder_destroy(enc) };
                 std::process::exit(1);
+            }
+        }
+
+        if invert {
+            for byte in buf.iter_mut() {
+                *byte = !*byte;
             }
         }
 
@@ -422,7 +438,7 @@ fn cmd_transcode(args: TranscodeArgs) {
     };
 
     eprintln!("トランスコード開始: {width}x{height} @ {}fps", args.fps);
-    encode_stream(Box::new(child_stdout), open_write(&args.output), config, "トランスコード");
+    encode_stream(Box::new(child_stdout), open_write(&args.output), config, "トランスコード", args.invert);
 
     // ffmpeg の終了を待ち、異常終了を検出する。
     let status = child.wait().unwrap_or_else(|e| {

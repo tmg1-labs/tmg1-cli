@@ -79,6 +79,7 @@ tmg1 encode --size 128x64 --fps 30 -i frames.raw -o out.tmg1
 | `--scd` | `true` | Scene-change detection: compress P as both I and P, keep smaller |
 | `--vfr` | `true` | Variable frame rate: coalesce identical frames into `ptsDelta` |
 | `--index` | `false` | Append a TMGX frame index chunk at EOF |
+| `--invert` | `false` | Invert input bits before encoding (for black/white polarity flip) |
 
 ### transcode — any media → TMG1 (via ffmpeg)
 

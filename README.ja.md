@@ -79,6 +79,7 @@ tmg1 encode --size 128x64 --fps 30 -i frames.raw -o out.tmg1
 | `--scd` | `true` | シーンチェンジ検出: P を I/P 両方で圧縮し小さい方を採用 |
 | `--vfr` | `true` | 可変フレームレート: 同一フレームを `ptsDelta` に集約 |
 | `--index` | `false` | 末尾に TMGX フレーム索引チャンクを付加 |
+| `--invert` | `false` | エンコード前に入力ビットを反転（白黒極性反転用） |
 
 ### transcode — 任意メディア → TMG1（ffmpeg 経由）
 
