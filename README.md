@@ -42,6 +42,9 @@ Requirements:
 If you forgot `--recursive`, fetch the codec submodule with
 `git submodule update --init --recursive`.
 
+To install `tmg1` onto your `PATH` (`~/.cargo/bin`) instead of just building it
+into `target/release/`, run `cargo install --path .` from the cloned repo.
+
 ## Usage
 
 ```

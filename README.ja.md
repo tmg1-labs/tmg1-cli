@@ -42,6 +42,10 @@ cargo build --release   # build.rs が同梱 tmg1-codec の C++ を cc クレー
 `--recursive` を付け忘れた場合は
 `git submodule update --init --recursive` で codec サブモジュールを取得します。
 
+`target/release/` にビルドするだけでなく `tmg1` を `PATH`（`~/.cargo/bin`）に
+インストールしたい場合は、クローンしたリポジトリで `cargo install --path .`
+を実行してください。
+
 ## 使い方
 
 ```
