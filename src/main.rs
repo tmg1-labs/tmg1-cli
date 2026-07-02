@@ -392,11 +392,14 @@ fn cmd_transcode(args: TranscodeArgs) {
     let scale = format!("scale={width}:{height}");
     let fps_str = args.fps.to_string();
 
-    // ffmpeg で monow(1bpp, MSBファースト) の rawvideo を生成し、その標準出力をエンコーダへ流す。
+    // ffmpeg で monob(1bpp, MSBファースト, bit=1が白/点灯) の rawvideo を生成し、その標準出力を
+    // エンコーダへ流す。monow は bit=1が黒(インク)というfax/紙媒体の規約で、発光ディスプレイ
+    // （bit=1=点灯が自然）とは白黒が逆になるため、monob を採用する
+    // （u8g2 drawXBMP は bit=1 を描画色=点灯として扱う。tmg1-esp32-demo 側の実機検証で判明）。
     let mut cmd = Command::new("ffmpeg");
     cmd.arg("-i")
         .arg(if use_stdin { "pipe:0" } else { args.input.as_str() })
-        .args(["-vf", &scale, "-r", &fps_str, "-f", "rawvideo", "-pix_fmt", "monow", "pipe:1"])
+        .args(["-vf", &scale, "-r", &fps_str, "-f", "rawvideo", "-pix_fmt", "monob", "pipe:1"])
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit()); // ffmpeg の進捗ログは自プロセスの stderr へそのまま流す
     if use_stdin {
@@ -426,7 +429,7 @@ fn cmd_transcode(args: TranscodeArgs) {
         timebase_num:    1,
         timebase_den:    args.fps,
         key_interval:    args.key_int,
-        msb_first:       1, // ffmpeg monow は MSBファースト固定
+        msb_first:       1, // ffmpeg monob は MSBファースト固定
         use_range_coder: matches!(args.coder, Coder::Range) as u8,
         delta_enabled:   1, // transcode では P-Frame 圧縮を常時有効（dotnet版準拠）
         prediction_enabled: args.prediction as u8,

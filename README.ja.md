@@ -20,8 +20,8 @@
   フレーム索引を、すべてフラグで制御できます。
 - **パイプ親和性** — `-i -` で stdin、`-o -` で stdout（いずれも既定値）。ffmpeg や
   シェルパイプラインとそのまま連結できます。
-- **`transcode` は ffmpeg をラップ** — 入力を `monow`（1bpp・MSBファースト）
-  rawvideo へスケール変換し、そのままエンコーダへ流し込みます。
+- **`transcode` は ffmpeg をラップ** — 入力を `monob`（1bpp・MSBファースト・
+  bit=1が白/点灯）rawvideo へスケール変換し、そのままエンコーダへ流し込みます。
 
 ## インストール / ビルド
 
@@ -83,9 +83,9 @@ tmg1 encode --size 128x64 --fps 30 -i frames.raw -o out.tmg1
 
 ### transcode — 任意メディア → TMG1（ffmpeg 経由）
 
-ffmpeg をラップし、入力を `monow` rawvideo へ変換してエンコードします。フラグは
-`encode` とほぼ同じですが、`--delta` は常時有効で、`--msb-first` はありません
-（ffmpeg `monow` が MSBファースト固定のため）。
+ffmpeg をラップし、入力を `monob` rawvideo（bit=1が白/点灯。発光ディスプレイの
+規約に合わせている）へ変換してエンコードします。フラグは `encode` とほぼ同じですが、
+`--delta` は常時有効で、`--msb-first` はありません（ffmpeg `monob` が MSBファースト固定のため）。
 
 ```bash
 tmg1 transcode -i input.mp4 --size 128x64 --fps 30 -o out.tmg1
@@ -124,7 +124,7 @@ tmg1 info -i out.tmg1
 tmg1 transcode -i input.mp4 --size 128x64 --fps 30 -o out.tmg1
 
 # 手動 ffmpeg → encode のパイプ（transcode と等価）
-ffmpeg -i input.mp4 -vf scale=128:64 -r 30 -f rawvideo -pix_fmt monow - \
+ffmpeg -i input.mp4 -vf scale=128:64 -r 30 -f rawvideo -pix_fmt monob - \
   | tmg1 encode --size 128x64 --fps 30 -o out.tmg1
 
 # 情報表示 / デコード

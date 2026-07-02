@@ -20,8 +20,8 @@ build time.
   optional TMGX frame index, all exposed as flags.
 - **Pipe-friendly** — `-i -` reads stdin and `-o -` writes stdout (both are the
   default), so commands compose with ffmpeg and shell pipelines.
-- **`transcode` wraps ffmpeg** — scales any input to `monow` (1bpp, MSB-first)
-  rawvideo and streams it straight into the encoder.
+- **`transcode` wraps ffmpeg** — scales any input to `monob` (1bpp, MSB-first,
+  bit=1 is white/lit) rawvideo and streams it straight into the encoder.
 
 ## Install / Build
 
@@ -83,9 +83,10 @@ tmg1 encode --size 128x64 --fps 30 -i frames.raw -o out.tmg1
 
 ### transcode — any media → TMG1 (via ffmpeg)
 
-Wraps ffmpeg to scale/convert the input to `monow` rawvideo and encode it. Takes
-the same flags as `encode` except: `--delta` is always on, and there is no
-`--msb-first` (ffmpeg `monow` is fixed MSB-first).
+Wraps ffmpeg to scale/convert the input to `monob` rawvideo (bit=1 is white/lit,
+matching lit-pixel displays) and encode it. Takes the same flags as `encode`
+except: `--delta` is always on, and there is no `--msb-first` (ffmpeg `monob`
+is fixed MSB-first).
 
 ```bash
 tmg1 transcode -i input.mp4 --size 128x64 --fps 30 -o out.tmg1
@@ -124,7 +125,7 @@ tmg1 info -i out.tmg1
 tmg1 transcode -i input.mp4 --size 128x64 --fps 30 -o out.tmg1
 
 # Manual ffmpeg → encode pipe (equivalent to transcode)
-ffmpeg -i input.mp4 -vf scale=128:64 -r 30 -f rawvideo -pix_fmt monow - \
+ffmpeg -i input.mp4 -vf scale=128:64 -r 30 -f rawvideo -pix_fmt monob - \
   | tmg1 encode --size 128x64 --fps 30 -o out.tmg1
 
 # Inspect / decode
