@@ -1,10 +1,10 @@
 # 現在の作業コンテキスト
 
-最終更新: 2026-07-01（transcode の pix_fmt を monow→monob に修正、根本原因を特定）
+最終更新: 2026-07-03（monob版の実機OLED動作確認が完了。`tmg1-esp32-demo`側README/コメントも更新済み）
 
 ## 今やっていること
 - **`transcode` の ffmpeg pix_fmt を `monow`→`monob` に変更（白黒反転の根本原因を修正）**
-  （2026-07-01、コード変更済み・**未コミット**）。
+  （2026-07-01、commit `ce4a9c8`、push済み。**2026-07-03に実機OLEDでの動作確認完了**）。
   - **発端**: `--invert` 実装後、ユーザーから「monow は bit=1が黒(インク)の紙媒体規約。
     発光ディスプレイなら黒=背景と考えるのが普通では、monobが正解では」と指摘。
   - **根本原因を実機コードで確認**: `tmg1-esp32-demo/src/main.cpp:92-97` のコメントに
@@ -27,6 +27,9 @@
   - **リリース方針**: ユーザー判断で「即コミット・push・v0.3.1タグ」を選択（実機検証済みの
     ビット反転関係の実証で十分と判断。実機OLEDでの最終表示確認は別途）。
     `Cargo.toml`を`0.3.0`→`0.3.1`に更新。
+  - **実機OLED最終確認（2026-07-03）**: monob直接エンコードでの実機表示動作を確認済み。
+    `tmg1-esp32-demo`側の`README.md`/`README.ja.md`/`src/main.cpp`のコメントも
+    「ffmpeg negate前提」から「`-pix_fmt monob`直接エンコード前提」の記述へ更新済み。
 
 ## 今やっていること（過去分）
 - **encode/transcode に `--invert`（エンコード前ビット反転）オプションを追加 + v0.3.0 リリース**
@@ -89,8 +92,6 @@
 - crates.io 公開は未対応（cargo install --path . のみサポート）。
 
 ## 次にやること
-- monob版transcodeの実機OLED確認、および`howto_video_to_tmg1.md`（tmg1-esp32-demo側）の
-  手順更新（手動XOR前提の記述をmonob直接生成に置き換えられるか検討）。
 - crates.io公開を進める場合は vendor化/別クレート分離の方針を `tmg1-codec` 側と合意してから
   着手する。
 
